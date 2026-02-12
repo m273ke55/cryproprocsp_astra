@@ -1,0 +1,7 @@
+---
+# Optional for iteration-2:
+# - name: Restart pcscd
+#   become: true
+#   ansible.builtin.service:
+#     name: "{{ cryptopro_csp_pcscd_service }}"
+#     state: restarted

@@ -1,0 +1,13 @@
+---
+cryptopro_csp_bin_dir: /opt/cprocsp/bin/amd64
+cryptopro_csp_sbin_dir: /opt/cprocsp/sbin/amd64
+cryptopro_csp_manage_path: false
+
+cryptopro_csp_tgz_path: ""
+cryptopro_csp_tgz_on_remote: false
+cryptopro_csp_install_dir: /tmp/cryptopro_csp_install
+cryptopro_csp_force_reinstall: false
+cryptopro_csp_run_smoke_test: true
+
+cryptopro_csp_license_apply: false
+cryptopro_csp_license_key: ""

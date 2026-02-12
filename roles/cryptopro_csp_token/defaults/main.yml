@@ -1,0 +1,8 @@
+---
+cryptopro_csp_token_enable: true
+cryptopro_csp_token_packages:
+  - pcscd
+  - libccid
+  - libgost-astra
+cryptopro_csp_pcscd_service: pcscd
+cryptopro_csp_token_run_smoke_test: true

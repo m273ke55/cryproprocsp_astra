@@ -1,0 +1,12 @@
+---
+- name: TODO | Validate required installation inputs
+  ansible.builtin.debug:
+    msg:
+      - "TODO(iteration-2): validate cryptopro_csp_tgz_path and architecture (amd64)."
+      - "TODO(iteration-2): detect already installed CSP and support force reinstall flag."
+
+- name: TODO | Install CryptoPro CSP from TGZ
+  ansible.builtin.debug:
+    msg:
+      - "TODO(iteration-2): copy/unarchive TGZ and run non-interactive installer command."
+      - "Install logic intentionally omitted in skeleton iteration."
