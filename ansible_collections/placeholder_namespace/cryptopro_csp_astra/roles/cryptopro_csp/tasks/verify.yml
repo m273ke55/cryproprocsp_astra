@@ -1,0 +1,17 @@
+---
+- name: Verify expected CryptoPro binary paths exist
+  ansible.builtin.stat:
+    path: "{{ item }}"
+  loop:
+    - "{{ cryptopro_csp_sbin_dir }}/cpconfig"
+    - "{{ cryptopro_csp_bin_dir }}/certmgr"
+    - "{{ cryptopro_csp_bin_dir }}/csptest"
+  register: cryptopro_csp_binary_checks
+  when: cryptopro_csp_run_smoke_test | bool
+
+- name: Report skeleton smoke-test status
+  ansible.builtin.debug:
+    msg: >-
+      Skeleton verification executed. Existing binaries:
+      {{ cryptopro_csp_binary_checks.results | selectattr('stat.exists', 'defined') | selectattr('stat.exists') | map(attribute='item') | list }}
+  when: cryptopro_csp_run_smoke_test | bool

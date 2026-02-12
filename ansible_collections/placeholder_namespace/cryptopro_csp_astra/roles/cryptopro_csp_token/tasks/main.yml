@@ -1,0 +1,8 @@
+---
+- name: Include token setup tasks
+  ansible.builtin.include_tasks: setup.yml
+  when: cryptopro_csp_token_enable | bool
+
+- name: Include token verification tasks
+  ansible.builtin.include_tasks: verify.yml
+  when: cryptopro_csp_token_enable | bool

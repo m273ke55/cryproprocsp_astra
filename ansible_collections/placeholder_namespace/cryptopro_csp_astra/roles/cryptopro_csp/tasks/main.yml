@@ -1,0 +1,12 @@
+---
+- name: Include install tasks
+  ansible.builtin.include_tasks: install.yml
+
+- name: Include PATH management tasks
+  ansible.builtin.include_tasks: path.yml
+
+- name: Include license tasks
+  ansible.builtin.include_tasks: license.yml
+
+- name: Include verification tasks
+  ansible.builtin.include_tasks: verify.yml

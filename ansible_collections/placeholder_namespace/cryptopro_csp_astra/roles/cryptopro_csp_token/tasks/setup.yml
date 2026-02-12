@@ -1,0 +1,6 @@
+---
+- name: TODO | Install PC/SC packages (skeleton)
+  ansible.builtin.debug:
+    msg:
+      - "TODO(iteration-2): install required packages: {{ cryptopro_csp_token_packages }}"
+      - "TODO(iteration-2): enable and start service {{ cryptopro_csp_pcscd_service }}"
