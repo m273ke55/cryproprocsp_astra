@@ -3,10 +3,20 @@ cryptopro_csp_bin_dir: /opt/cprocsp/bin/amd64
 cryptopro_csp_sbin_dir: /opt/cprocsp/sbin/amd64
 cryptopro_csp_manage_path: false
 
+# Path to TGZ distribution (controller or target host when cryptopro_csp_tgz_on_remote=true)
 cryptopro_csp_tgz_path: ""
+# Set true when TGZ is already on managed host
 cryptopro_csp_tgz_on_remote: false
+# Remote extraction directory for TGZ contents
+cryptopro_csp_extract_dir: /tmp/cryptopro_csp_extract
+# DEPRECATED: не используется, оставлено для совместимости, используйте cryptopro_csp_extract_dir
 cryptopro_csp_install_dir: /tmp/cryptopro_csp_install
+# Force reinstall even when installation marker already exists
 cryptopro_csp_force_reinstall: false
+# Marker file to detect installed CryptoPro CSP
+cryptopro_csp_install_check_path: /opt/cprocsp/bin/amd64/cryptcp
+# Remove extraction directory after installation attempt
+cryptopro_csp_cleanup: true
 cryptopro_csp_run_smoke_test: true
 
 cryptopro_csp_license_apply: false

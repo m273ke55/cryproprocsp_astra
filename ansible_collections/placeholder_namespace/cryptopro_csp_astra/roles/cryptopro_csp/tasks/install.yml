@@ -1,12 +1,102 @@
 ---
-- name: TODO | Validate required installation inputs
-  ansible.builtin.debug:
-    msg:
-      - "TODO(iteration-2): validate cryptopro_csp_tgz_path and architecture (amd64)."
-      - "TODO(iteration-2): detect already installed CSP and support force reinstall flag."
+- name: Check CryptoPro CSP installation marker
+  ansible.builtin.stat:
+    path: "{{ cryptopro_csp_install_check_path }}"
+  register: cryptopro_csp_install_marker
 
-- name: TODO | Install CryptoPro CSP from TGZ
-  ansible.builtin.debug:
-    msg:
-      - "TODO(iteration-2): copy/unarchive TGZ and run non-interactive installer command."
-      - "Install logic intentionally omitted in skeleton iteration."
+- name: Set install-required flag
+  ansible.builtin.set_fact:
+    cryptopro_csp_install_required: >-
+      {{ (cryptopro_csp_force_reinstall | bool) or (not cryptopro_csp_install_marker.stat.exists) }}
+
+
+- name: Validate TGZ path when installation is required
+  ansible.builtin.assert:
+    that:
+      - cryptopro_csp_tgz_path | length > 0
+    fail_msg: >-
+      cryptopro_csp_tgz_path must be provided when installation is required.
+      Expected TGZ with linux-amd64_deb/*.deb.
+  when: cryptopro_csp_install_required
+
+- name: Prepare installation extraction directory
+  ansible.builtin.file:
+    path: "{{ cryptopro_csp_extract_dir }}"
+    state: directory
+    mode: "0755"
+  when: cryptopro_csp_install_required
+
+- name: Extract CryptoPro CSP TGZ
+  ansible.builtin.unarchive:
+    src: "{{ cryptopro_csp_tgz_path }}"
+    dest: "{{ cryptopro_csp_extract_dir }}"
+    remote_src: "{{ cryptopro_csp_tgz_on_remote | bool }}"
+  when: cryptopro_csp_install_required
+
+- name: Discover local DEB packages
+  ansible.builtin.find:
+    paths: "{{ cryptopro_csp_extract_dir }}"
+    patterns: "*.deb"
+    recurse: true
+    file_type: file
+  register: cryptopro_csp_deb_packages
+  when: cryptopro_csp_install_required
+
+- name: Fail if TGZ does not contain DEB packages
+  ansible.builtin.fail:
+    msg: >-
+      No .deb files found in {{ cryptopro_csp_extract_dir }} after extracting {{ cryptopro_csp_tgz_path }}.
+      Expected path pattern like linux-amd64_deb/*.deb inside TGZ.
+  when:
+    - cryptopro_csp_install_required
+    - (cryptopro_csp_deb_packages.matched | default(0) | int) == 0
+
+- name: Install CryptoPro CSP packages
+  when:
+    - cryptopro_csp_install_required
+    - (cryptopro_csp_deb_packages.matched | default(0) | int) > 0
+  block:
+    - name: Refresh apt cache before local DEB install
+      ansible.builtin.apt:
+        update_cache: true
+        cache_valid_time: 3600
+
+    - name: Install CryptoPro local DEBs
+      ansible.builtin.apt:
+        deb: "{{ item.path }}"
+      loop: "{{ cryptopro_csp_deb_packages.files | sort(attribute='path') }}"
+      loop_control:
+        label: "{{ item.path | basename }}"
+
+  rescue:
+    - name: Repair broken dependencies
+      ansible.builtin.apt:
+        state: fixed
+        update_cache: true
+
+    - name: Retry CryptoPro local DEBs install
+      ansible.builtin.apt:
+        deb: "{{ item.path }}"
+      loop: "{{ cryptopro_csp_deb_packages.files | sort(attribute='path') }}"
+      loop_control:
+        label: "{{ item.path | basename }}"
+
+- name: Verify CryptoPro CSP installation marker after install
+  ansible.builtin.stat:
+    path: "{{ cryptopro_csp_install_check_path }}"
+  register: cryptopro_csp_install_marker_after
+
+- name: Fail if installation marker is absent after install
+  ansible.builtin.fail:
+    msg: >-
+      CryptoPro CSP installation did not produce expected marker {{ cryptopro_csp_install_check_path }}.
+      Check package compatibility and installation logs.
+  when: not cryptopro_csp_install_marker_after.stat.exists
+
+- name: Cleanup installation extraction directory
+  ansible.builtin.file:
+    path: "{{ cryptopro_csp_extract_dir }}"
+    state: absent
+  when:
+    - cryptopro_csp_cleanup | bool
+    - cryptopro_csp_install_required
