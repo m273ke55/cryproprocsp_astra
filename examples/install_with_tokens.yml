@@ -1,0 +1,14 @@
+---
+- name: CryptoPro CSP with token dependencies (skeleton)
+  hosts: all
+  become: true
+  gather_facts: true
+  collections:
+    - placeholder_namespace.cryptopro_csp_astra
+
+  roles:
+    - role: cryptopro_csp
+      vars:
+        cryptopro_csp_tgz_path: /path/to/linux-amd64_deb.tgz
+
+    - role: cryptopro_csp_token
