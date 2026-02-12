@@ -7,6 +7,6 @@
     - placeholder_namespace.cryptopro_csp_astra
 
   roles:
-    - role: cryptopro_csp
+    - role: placeholder_namespace.cryptopro_csp_astra.cryptopro_csp
       vars:
         cryptopro_csp_tgz_path: /path/to/linux-amd64_deb.tgz
