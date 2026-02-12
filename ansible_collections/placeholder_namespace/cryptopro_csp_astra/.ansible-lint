@@ -1,0 +1,7 @@
+profile: basic
+exclude_paths:
+  - .git/
+  - .venv/
+  - .ansible/
+skip_list:
+  - yaml[line-length]

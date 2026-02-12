@@ -1,0 +1,26 @@
+namespace: placeholder_namespace
+name: cryptopro_csp_astra
+version: 0.1.0
+readme: README.md
+authors:
+  - Astra Scholarship Team
+description: >-
+  Ansible collection skeleton for CryptoPro CSP basic installation and token readiness on Astra Linux.
+license:
+  - MIT
+tags:
+  - astra
+  - cryptopro
+  - csp
+  - security
+dependencies: {}
+repository: https://example.com/placeholder/cryptopro-csp-astra
+documentation: https://example.com/placeholder/cryptopro-csp-astra
+homepage: https://example.com/placeholder/cryptopro-csp-astra
+issues: https://example.com/placeholder/cryptopro-csp-astra/issues
+build_ignore:
+  - .git
+  - .gitignore
+  - .venv
+  - __pycache__
+  - '*.pyc'

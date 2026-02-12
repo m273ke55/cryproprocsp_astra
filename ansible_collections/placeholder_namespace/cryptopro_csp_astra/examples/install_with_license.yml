@@ -1,0 +1,16 @@
+---
+- name: CryptoPro CSP with license example (skeleton)
+  hosts: all
+  become: true
+  gather_facts: true
+
+  vars:
+    # Рекомендуется хранить в Ansible Vault.
+    vault_cryptopro_csp_license_key: "{{ cryptopro_csp_license_key_vault | default('') }}"
+
+  roles:
+    - role: placeholder_namespace.cryptopro_csp_astra.cryptopro_csp
+      vars:
+        cryptopro_csp_tgz_path: /path/to/linux-amd64_deb.tgz
+        cryptopro_csp_license_apply: true
+        cryptopro_csp_license_key: "{{ vault_cryptopro_csp_license_key }}"

@@ -1,0 +1,28 @@
+---
+- name: Manage CryptoPro PATH profile script
+  become: true
+  ansible.builtin.copy:
+    dest: /etc/profile.d/cryptopro-csp.sh
+    owner: root
+    group: root
+    mode: "0644"
+    content: |
+      # Managed by Ansible (cryptopro_csp role)
+      # Adds CryptoPro CSP tools to PATH for interactive shells.
+      case ":$PATH:" in
+        *:{{ cryptopro_csp_bin_dir }}:*) ;;
+        *) PATH="{{ cryptopro_csp_bin_dir }}:$PATH" ;;
+      esac
+      case ":$PATH:" in
+        *:{{ cryptopro_csp_sbin_dir }}:*) ;;
+        *) PATH="{{ cryptopro_csp_sbin_dir }}:$PATH" ;;
+      esac
+      export PATH
+  when: cryptopro_csp_manage_path | bool
+
+- name: Remove CryptoPro PATH profile script when management disabled
+  become: true
+  ansible.builtin.file:
+    path: /etc/profile.d/cryptopro-csp.sh
+    state: absent
+  when: not cryptopro_csp_manage_path | bool

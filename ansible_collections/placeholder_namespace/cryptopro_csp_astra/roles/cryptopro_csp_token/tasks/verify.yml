@@ -1,0 +1,7 @@
+---
+- name: TODO | Verify pcscd service and optional reader enumeration (skeleton)
+  ansible.builtin.debug:
+    msg:
+      - "TODO(iteration-2): verify {{ cryptopro_csp_token_pcscd_service }} is active."
+      - "TODO(iteration-2): optionally enumerate readers when CryptoPro tools are available."
+  when: cryptopro_csp_token_run_smoke_test | bool
