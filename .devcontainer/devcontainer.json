@@ -1,0 +1,14 @@
+{
+  "name": "Astra Automation Content Development Environment",
+  "image": "hub.astra-automation.ru/aa-2.0/aa-cdk:latest",
+  "containerUser": "root",
+  "privileged": true,
+  "mounts": [
+    "source=${localWorkspaceFolder},target=/tmp/podman/oscap,type=bind,consistency=cached"
+  ],
+  "customizations": {
+    "vscode": {
+      "extensions": ["redhat.ansible", "ms-azuretools.vscode-docker"]
+    }
+  }
+}
