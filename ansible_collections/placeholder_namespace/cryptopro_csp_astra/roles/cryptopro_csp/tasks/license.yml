@@ -1,0 +1,12 @@
+---
+- name: TODO | Show license status (skeleton)
+  ansible.builtin.debug:
+    msg: "TODO(iteration-2): add idempotent license status check with cpconfig."
+
+- name: TODO | Apply license key securely (skeleton)
+  ansible.builtin.debug:
+    msg: "TODO(iteration-2): apply license key when cryptopro_csp_license_apply=true."
+  when:
+    - cryptopro_csp_license_apply | bool
+    - cryptopro_csp_license_key | length > 0
+  no_log: true

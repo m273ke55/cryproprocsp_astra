@@ -1,0 +1,9 @@
+.venv/
+.molecule/
+__pycache__/
+*.pyc
+*.retry
+.env
+dist/
+build/
+*.tar.gz
