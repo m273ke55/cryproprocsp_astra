@@ -1,0 +1,30 @@
+---
+- name: Gather service facts for token smoke-test
+  ansible.builtin.service_facts:
+  when: cryptopro_csp_token_run_smoke_test | bool
+
+- name: Fail when PCSC service is not active
+  ansible.builtin.fail:
+    msg: "Service {{ cryptopro_csp_pcscd_service }} is not running (state=running expected)."
+  when:
+    - cryptopro_csp_token_run_smoke_test | bool
+    - ansible_facts.services[cryptopro_csp_pcscd_service + '.service'] is not defined
+      or ansible_facts.services[cryptopro_csp_pcscd_service + '.service'].state != 'running'
+
+- name: Check whether pcsc_scan utility is present
+  ansible.builtin.command:
+    argv: ["which", "pcsc_scan"]
+  register: cryptopro_csp_pcsc_scan_check
+  changed_when: false
+  failed_when: false
+  when: cryptopro_csp_token_run_smoke_test | bool
+
+- name: Optionally probe readers with pcsc_scan (non-fatal)
+  ansible.builtin.command:
+    argv: ["pcsc_scan", "-n"]
+  register: cryptopro_csp_pcsc_scan_probe
+  changed_when: false
+  failed_when: false
+  when:
+    - cryptopro_csp_token_run_smoke_test | bool
+    - cryptopro_csp_pcsc_scan_check.rc == 0

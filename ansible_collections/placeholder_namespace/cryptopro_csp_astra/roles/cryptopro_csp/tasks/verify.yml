@@ -1,0 +1,30 @@
+---
+- name: Verify expected CryptoPro binaries exist
+  ansible.builtin.stat:
+    path: "{{ item }}"
+  loop:
+    - "{{ cryptopro_csp_sbin_dir }}/cpconfig"
+    - "{{ cryptopro_csp_bin_dir }}/certmgr"
+    - "{{ cryptopro_csp_bin_dir }}/csptest"
+  register: cryptopro_csp_binary_checks
+  when: cryptopro_csp_run_smoke_test | bool
+  changed_when: false
+
+- name: Fail when required CryptoPro binary is missing
+  ansible.builtin.fail:
+    msg: "Required CryptoPro binary is missing: {{ item.item }}"
+  loop: "{{ cryptopro_csp_binary_checks.results | default([]) }}"
+  when:
+    - cryptopro_csp_run_smoke_test | bool
+    - not item.stat.exists
+
+- name: Run read-only CryptoPro CSP smoke-test command
+  ansible.builtin.command:
+    argv:
+      - "{{ cryptopro_csp_sbin_dir }}/cpconfig"
+      - -license
+      - -view
+  register: cryptopro_csp_smoke_test
+  when: cryptopro_csp_run_smoke_test | bool
+  changed_when: false
+  failed_when: cryptopro_csp_smoke_test.rc != 0

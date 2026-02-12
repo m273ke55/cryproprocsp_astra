@@ -1,0 +1,69 @@
+---
+- name: Read current CryptoPro CSP license state
+  ansible.builtin.command:
+    argv:
+      - "{{ cryptopro_csp_sbin_dir }}/cpconfig"
+      - -license
+      - -view
+  register: cryptopro_csp_license_view
+  changed_when: false
+  failed_when: cryptopro_csp_license_view.rc != 0
+
+- name: Detect whether license is already active
+  ansible.builtin.set_fact:
+    cryptopro_csp_license_is_active: >-
+      {{
+        ('expired' not in (cryptopro_csp_license_view.stdout | lower))
+        and (
+          ('permanent' in (cryptopro_csp_license_view.stdout | lower))
+          or ('valid' in (cryptopro_csp_license_view.stdout | lower))
+          or ('active' in (cryptopro_csp_license_view.stdout | lower))
+        )
+      }}
+  changed_when: false
+
+- name: Apply CryptoPro CSP license key
+  ansible.builtin.command:
+    argv:
+      - "{{ cryptopro_csp_sbin_dir }}/cpconfig"
+      - -license
+      - -set
+      - "{{ cryptopro_csp_license_key }}"
+  register: cryptopro_csp_license_set
+  when:
+    - cryptopro_csp_license_apply | bool
+    - cryptopro_csp_license_key | length > 0
+    - not cryptopro_csp_license_is_active | bool
+  changed_when: cryptopro_csp_license_set.rc == 0
+  failed_when: cryptopro_csp_license_set.rc != 0
+  no_log: true
+
+- name: Re-read license state after apply
+  ansible.builtin.command:
+    argv:
+      - "{{ cryptopro_csp_sbin_dir }}/cpconfig"
+      - -license
+      - -view
+  register: cryptopro_csp_license_view_after
+  when:
+    - cryptopro_csp_license_apply | bool
+    - cryptopro_csp_license_key | length > 0
+  changed_when: false
+  failed_when: cryptopro_csp_license_view_after.rc != 0
+
+- name: Fail if license apply requested but license still not active
+  ansible.builtin.fail:
+    msg: >-
+      License apply requested, but cpconfig license status still does not show active/valid/permanent state.
+      Verify the provided key and CryptoPro CSP installation.
+  when:
+    - cryptopro_csp_license_apply | bool
+    - cryptopro_csp_license_key | length > 0
+    - not (
+        ('expired' not in (cryptopro_csp_license_view_after.stdout | lower))
+        and (
+          ('permanent' in (cryptopro_csp_license_view_after.stdout | lower))
+          or ('valid' in (cryptopro_csp_license_view_after.stdout | lower))
+          or ('active' in (cryptopro_csp_license_view_after.stdout | lower))
+        )
+      )
