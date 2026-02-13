@@ -4,11 +4,36 @@
     path: "{{ cryptopro_csp_install_check_path }}"
   register: cryptopro_csp_install_marker
 
+- name: Check key CryptoPro package installation state
+  ansible.builtin.command:
+    argv:
+      - dpkg-query
+      - -W
+      - -f=${Status}
+      - lsb-cprocsp-capilite-64
+  register: cryptopro_csp_key_pkg_query
+  changed_when: false
+  failed_when: false
+
 - name: Set install-required flag
   ansible.builtin.set_fact:
     cryptopro_csp_install_required: >-
-      {{ (cryptopro_csp_force_reinstall | bool) or (not cryptopro_csp_install_marker.stat.exists) }}
+      {{
+        (cryptopro_csp_force_reinstall | bool)
+        or
+        (not cryptopro_csp_install_marker.stat.exists)
+        or
+        ('install ok installed' not in (cryptopro_csp_key_pkg_query.stdout | default('')))
+      }}
 
+- name: Explain install-required decision in check mode
+  ansible.builtin.debug:
+    msg: >-
+      Check mode decision: install_required={{ cryptopro_csp_install_required }};
+      force_reinstall={{ cryptopro_csp_force_reinstall | bool }};
+      marker_exists={{ cryptopro_csp_install_marker.stat.exists | default(false) }};
+      key_pkg_installed={{ 'install ok installed' in (cryptopro_csp_key_pkg_query.stdout | default('')) }}.
+  when: ansible_check_mode
 
 - name: Validate TGZ path when installation is required
   ansible.builtin.assert:
@@ -33,53 +58,283 @@
     remote_src: "{{ cryptopro_csp_tgz_on_remote | bool }}"
   when: cryptopro_csp_install_required
 
-- name: Discover local DEB packages
-  ansible.builtin.find:
-    paths: "{{ cryptopro_csp_extract_dir }}"
-    patterns: "*.deb"
-    recurse: true
-    file_type: file
-  register: cryptopro_csp_deb_packages
+- name: Check linux-amd64_deb directory existence
+  ansible.builtin.stat:
+    path: "{{ cryptopro_csp_extract_dir }}/linux-amd64_deb"
+  register: cryptopro_csp_deb_dir
   when: cryptopro_csp_install_required
 
-- name: Fail if TGZ does not contain DEB packages
+- name: Fail when linux-amd64_deb directory is missing
   ansible.builtin.fail:
     msg: >-
-      No .deb files found in {{ cryptopro_csp_extract_dir }} after extracting {{ cryptopro_csp_tgz_path }}.
-      Expected path pattern like linux-amd64_deb/*.deb inside TGZ.
+      Directory {{ cryptopro_csp_extract_dir }}/linux-amd64_deb was not found after extracting {{ cryptopro_csp_tgz_path }}.
+      Expected CryptoPro TGZ layout with linux-amd64_deb/*.deb.
+  when:
+    - cryptopro_csp_install_required
+    - not cryptopro_csp_deb_dir.stat.exists
+
+- name: Discover local DEB packages in linux-amd64_deb
+  ansible.builtin.find:
+    paths: "{{ cryptopro_csp_extract_dir }}/linux-amd64_deb"
+    patterns: "*.deb"
+    recurse: false
+    file_type: file
+  register: cryptopro_csp_deb_packages
+  when:
+    - cryptopro_csp_install_required
+    - cryptopro_csp_deb_dir.stat.exists
+
+- name: Fail if linux-amd64_deb does not contain DEB packages
+  ansible.builtin.fail:
+    msg: >-
+      No .deb files found in {{ cryptopro_csp_extract_dir }}/linux-amd64_deb after extracting {{ cryptopro_csp_tgz_path }}.
+      Expected path linux-amd64_deb/*.deb inside TGZ.
   when:
     - cryptopro_csp_install_required
     - (cryptopro_csp_deb_packages.matched | default(0) | int) == 0
 
-- name: Install CryptoPro CSP packages
+- name: Read package names from DEB metadata
+  ansible.builtin.command:
+    argv:
+      - dpkg-deb
+      - -f
+      - "{{ item.path }}"
+      - Package
+  loop: "{{ cryptopro_csp_deb_packages.files | sort(attribute='path') }}"
+  register: cryptopro_csp_deb_meta
+  changed_when: false
   when:
     - cryptopro_csp_install_required
     - (cryptopro_csp_deb_packages.matched | default(0) | int) > 0
+
+- name: Build DEB path-to-package map
+  ansible.builtin.set_fact:
+    cryptopro_csp_deb_map: "{{ cryptopro_csp_deb_map | default({}) | combine({item.item.path: (item.stdout | trim)}) }}"
+  loop: "{{ cryptopro_csp_deb_meta.results }}"
+  when: cryptopro_csp_install_required
+
+- name: Set package presence flags
+  ansible.builtin.set_fact:
+    cryptopro_csp_has_capilite_noarch: "{{ 'lsb-cprocsp-capilite-noarch' in (cryptopro_csp_deb_map.values() | list) }}"
+    cryptopro_csp_has_ca_certs: "{{ 'lsb-cprocsp-ca-certs' in (cryptopro_csp_deb_map.values() | list) }}"
+  when: cryptopro_csp_install_required
+
+- name: Build initial DEB basenames for installation
+  ansible.builtin.set_fact:
+    cryptopro_csp_install_deb_basenames: "{{ cryptopro_csp_deb_map | dict2items | sort(attribute='key') | map(attribute='key') | map('basename') | list }}"
+  when: cryptopro_csp_install_required
+
+- name: Exclude ca-certs when capilite-noarch is absent
+  ansible.builtin.set_fact:
+    cryptopro_csp_install_deb_basenames: >-
+      {{
+        cryptopro_csp_install_deb_basenames
+        | difference(
+            cryptopro_csp_deb_map
+            | dict2items
+            | selectattr('value', 'equalto', 'lsb-cprocsp-ca-certs')
+            | map(attribute='key')
+            | map('basename')
+            | list
+          )
+      }}
+  when:
+    - cryptopro_csp_install_required
+    - cryptopro_csp_skip_ca_certs_without_noarch | bool
+    - cryptopro_csp_has_ca_certs | bool
+    - not cryptopro_csp_has_capilite_noarch | bool
+
+- name: Fail when there are no DEBs left for installation
+  ansible.builtin.fail:
+    msg: >-
+      No DEB packages left for installation after filtering in {{ cryptopro_csp_extract_dir }}/linux-amd64_deb.
+      Check TGZ content and ca-certs/capilite-noarch compatibility.
+  when:
+    - cryptopro_csp_install_required
+    - (cryptopro_csp_install_deb_basenames | length) == 0
+
+- name: Build common apt-get argv options
+  ansible.builtin.set_fact:
+    cryptopro_csp_apt_common_argv: >-
+      {{
+        ['-y']
+        +
+        (['--no-install-recommends'] if (cryptopro_csp_apt_no_install_recommends | bool) else [])
+        +
+        (
+          ['-o', 'Dpkg::Options::=--force-confdef', '-o', 'Dpkg::Options::=--force-confold']
+          if (cryptopro_csp_dpkg_force_conffile | bool)
+          else []
+        )
+      }}
+  when:
+    - cryptopro_csp_install_required
+    - (cryptopro_csp_install_deb_basenames | length) > 0
+
+- name: Build apt-get install/fix argv lists
+  ansible.builtin.set_fact:
+    cryptopro_csp_apt_install_argv: >-
+      {{
+        ['apt-get']
+        + cryptopro_csp_apt_common_argv
+        + ['install']
+        + (cryptopro_csp_install_deb_basenames | map('regex_replace', '^(.*)$', './\\1') | list)
+      }}
+    cryptopro_csp_apt_fix_argv: >-
+      {{
+        ['apt-get']
+        + cryptopro_csp_apt_common_argv
+        + ['-f', 'install']
+      }}
+  when:
+    - cryptopro_csp_install_required
+    - (cryptopro_csp_install_deb_basenames | length) > 0
+
+- name: Show DEB packages that would be installed in check mode
+  ansible.builtin.debug:
+    msg: >-
+      Check mode: would run one apt-get transaction with packages:
+      {{ cryptopro_csp_install_deb_basenames | join(', ') }}
+  when:
+    - cryptopro_csp_install_required
+    - ansible_check_mode
+    - (cryptopro_csp_install_deb_basenames | length) > 0
+
+- name: Install CryptoPro CSP packages in a single apt transaction
+  when:
+    - cryptopro_csp_install_required
+    - not ansible_check_mode
+    - (cryptopro_csp_install_deb_basenames | length) > 0
   block:
     - name: Refresh apt cache before local DEB install
       ansible.builtin.apt:
         update_cache: true
         cache_valid_time: 3600
 
-    - name: Install CryptoPro local DEBs
-      ansible.builtin.apt:
-        deb: "{{ item.path }}"
-      loop: "{{ cryptopro_csp_deb_packages.files | sort(attribute='path') }}"
-      loop_control:
-        label: "{{ item.path | basename }}"
+    - name: Install CryptoPro local DEBs in one apt-get call
+      ansible.builtin.command:
+        argv: "{{ cryptopro_csp_apt_install_argv }}"
+      args:
+        chdir: "{{ cryptopro_csp_extract_dir }}/linux-amd64_deb"
+      environment:
+        DEBIAN_FRONTEND: noninteractive
+        LANG: C
+        LC_ALL: C
+      register: cryptopro_csp_apt_install_result
+      changed_when: >-
+        (
+          '0 newly installed' not in (((cryptopro_csp_apt_install_result.stdout | default('')) ~ ' ' ~ (cryptopro_csp_apt_install_result.stderr | default(''))) | lower)
+        )
+        and
+        (
+          'unpacking ' in (((cryptopro_csp_apt_install_result.stdout | default('')) ~ ' ' ~ (cryptopro_csp_apt_install_result.stderr | default(''))) | lower)
+          or
+          'setting up ' in (((cryptopro_csp_apt_install_result.stdout | default('')) ~ ' ' ~ (cryptopro_csp_apt_install_result.stderr | default(''))) | lower)
+          or
+          'installing ' in (((cryptopro_csp_apt_install_result.stdout | default('')) ~ ' ' ~ (cryptopro_csp_apt_install_result.stderr | default(''))) | lower)
+          or
+          'preparing to unpack' in (((cryptopro_csp_apt_install_result.stdout | default('')) ~ ' ' ~ (cryptopro_csp_apt_install_result.stderr | default(''))) | lower)
+          or
+          'selecting previously unselected package' in (((cryptopro_csp_apt_install_result.stdout | default('')) ~ ' ' ~ (cryptopro_csp_apt_install_result.stderr | default(''))) | lower)
+        )
 
   rescue:
     - name: Repair broken dependencies
-      ansible.builtin.apt:
-        state: fixed
-        update_cache: true
+      ansible.builtin.command:
+        argv: "{{ cryptopro_csp_apt_fix_argv }}"
+      environment:
+        DEBIAN_FRONTEND: noninteractive
+        LANG: C
+        LC_ALL: C
+      register: cryptopro_csp_apt_fix_result
+      changed_when: >-
+        (
+          '0 newly installed' not in (((cryptopro_csp_apt_fix_result.stdout | default('')) ~ ' ' ~ (cryptopro_csp_apt_fix_result.stderr | default(''))) | lower)
+        )
+        and
+        (
+          'unpacking ' in (((cryptopro_csp_apt_fix_result.stdout | default('')) ~ ' ' ~ (cryptopro_csp_apt_fix_result.stderr | default(''))) | lower)
+          or
+          'setting up ' in (((cryptopro_csp_apt_fix_result.stdout | default('')) ~ ' ' ~ (cryptopro_csp_apt_fix_result.stderr | default(''))) | lower)
+          or
+          'installing ' in (((cryptopro_csp_apt_fix_result.stdout | default('')) ~ ' ' ~ (cryptopro_csp_apt_fix_result.stderr | default(''))) | lower)
+          or
+          'preparing to unpack' in (((cryptopro_csp_apt_fix_result.stdout | default('')) ~ ' ' ~ (cryptopro_csp_apt_fix_result.stderr | default(''))) | lower)
+          or
+          'selecting previously unselected package' in (((cryptopro_csp_apt_fix_result.stdout | default('')) ~ ' ' ~ (cryptopro_csp_apt_fix_result.stderr | default(''))) | lower)
+        )
 
-    - name: Retry CryptoPro local DEBs install
-      ansible.builtin.apt:
-        deb: "{{ item.path }}"
-      loop: "{{ cryptopro_csp_deb_packages.files | sort(attribute='path') }}"
-      loop_control:
-        label: "{{ item.path | basename }}"
+    - name: Retry CryptoPro local DEBs install once
+      ansible.builtin.command:
+        argv: "{{ cryptopro_csp_apt_install_argv }}"
+      args:
+        chdir: "{{ cryptopro_csp_extract_dir }}/linux-amd64_deb"
+      environment:
+        DEBIAN_FRONTEND: noninteractive
+        LANG: C
+        LC_ALL: C
+      register: cryptopro_csp_apt_install_retry_result
+      changed_when: >-
+        (
+          '0 newly installed' not in (((cryptopro_csp_apt_install_retry_result.stdout | default('')) ~ ' ' ~ (cryptopro_csp_apt_install_retry_result.stderr | default(''))) | lower)
+        )
+        and
+        (
+          'unpacking ' in (((cryptopro_csp_apt_install_retry_result.stdout | default('')) ~ ' ' ~ (cryptopro_csp_apt_install_retry_result.stderr | default(''))) | lower)
+          or
+          'setting up ' in (((cryptopro_csp_apt_install_retry_result.stdout | default('')) ~ ' ' ~ (cryptopro_csp_apt_install_retry_result.stderr | default(''))) | lower)
+          or
+          'installing ' in (((cryptopro_csp_apt_install_retry_result.stdout | default('')) ~ ' ' ~ (cryptopro_csp_apt_install_retry_result.stderr | default(''))) | lower)
+          or
+          'preparing to unpack' in (((cryptopro_csp_apt_install_retry_result.stdout | default('')) ~ ' ' ~ (cryptopro_csp_apt_install_retry_result.stderr | default(''))) | lower)
+          or
+          'selecting previously unselected package' in (((cryptopro_csp_apt_install_retry_result.stdout | default('')) ~ ' ' ~ (cryptopro_csp_apt_install_retry_result.stderr | default(''))) | lower)
+        )
+
+- name: Build verification package list
+  ansible.builtin.set_fact:
+    cryptopro_csp_verify_packages: >-
+      {{
+        ['lsb-cprocsp-capilite-64']
+        +
+        (
+          cryptopro_csp_deb_map.values()
+          | list
+          | unique
+          | sort
+          | reject('equalto', 'lsb-cprocsp-capilite-64')
+          | reject('equalto', 'lsb-cprocsp-ca-certs')
+          | list
+        )[0:2]
+      }}
+  when: cryptopro_csp_install_required
+
+- name: Verify key CryptoPro packages are installed
+  ansible.builtin.command:
+    argv:
+      - dpkg-query
+      - -W
+      - -f=${Status}
+      - "{{ item }}"
+  loop: "{{ cryptopro_csp_verify_packages }}"
+  register: cryptopro_csp_verify_pkg_query
+  changed_when: false
+  failed_when: false
+  when:
+    - cryptopro_csp_install_required
+    - not ansible_check_mode
+    - (cryptopro_csp_verify_packages | length) > 0
+
+- name: Fail when key CryptoPro packages are not installed
+  ansible.builtin.fail:
+    msg: >-
+      CryptoPro CSP package {{ item.item }} is not installed after DEB transaction.
+      dpkg-query output: {{ item.stdout | default(item.stderr | default('no output')) }}
+  loop: "{{ cryptopro_csp_verify_pkg_query.results | default([]) }}"
+  when:
+    - cryptopro_csp_install_required
+    - not ansible_check_mode
+    - "'install ok installed' not in (item.stdout | default(''))"
 
 - name: Verify CryptoPro CSP installation marker after install
   ansible.builtin.stat:
@@ -91,7 +346,9 @@
     msg: >-
       CryptoPro CSP installation did not produce expected marker {{ cryptopro_csp_install_check_path }}.
       Check package compatibility and installation logs.
-  when: not cryptopro_csp_install_marker_after.stat.exists
+  when:
+    - not ansible_check_mode
+    - not cryptopro_csp_install_marker_after.stat.exists
 
 - name: Cleanup installation extraction directory
   ansible.builtin.file:

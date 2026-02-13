@@ -17,6 +17,9 @@ cryptopro_csp_force_reinstall: false
 cryptopro_csp_install_check_path: /opt/cprocsp/bin/amd64/cryptcp
 # Remove extraction directory after installation attempt
 cryptopro_csp_cleanup: true
+cryptopro_csp_skip_ca_certs_without_noarch: true
+cryptopro_csp_apt_no_install_recommends: false
+cryptopro_csp_dpkg_force_conffile: true
 cryptopro_csp_run_smoke_test: true
 
 cryptopro_csp_license_apply: false
